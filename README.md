@@ -1,2 +1,2 @@
-# Gas_Price
-Analyze historical gas prices, identify trends, and build a predictive model with ~95% accuracy using multivariate time series modeling.
+# Gas Price Analysis and Prediction Project
+In this project, I explore historical gas price data using R and key packages like tidyverse, forecast, and vars. The goal is to uncover patterns in how gas prices have changed over time and build a predictive model using multivariate time series analysis. By identifying the main factors that drive price changes, I aim to create a forecast with around 95% accuracy. This kind of analysis can be a helpful resource for policymakers, businesses, and everyday consumers who want to better understand market trends and make more thoughtfull decisions based on data.
