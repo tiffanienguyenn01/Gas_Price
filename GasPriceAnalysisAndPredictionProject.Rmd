@@ -1,0 +1,214 @@
+---
+title: "GAS PRICE ANALYSIS AND PREDICTION PROJECT"
+author: "Thu V Nguyen"
+output:
+  pdf_document: default
+  html_document:
+    highlight: monochrome
+    theme: paper
+  word_document: default
+---
+
+## **Dataset: U.S. Regular All Formulations Gas Price (GASREGW)**
+- **Source**: FED - GASREGW
+- **Description**: Weekly U.S. average price for regular gasoline, all formulations.
+- **Frequency**: Weekly (ending Monday)
+- **Units**: Dollars per gallon
+- **Coverage**: August 20, 1990 - Present
+
+![*Gas Price Trend of All Time*](Gas Price Trend.jpg)
+
+## **Is the Price at the Pump Predictable?**
+
+*In a time of economic uncertainty and volatile energy markets, predicting gas prices isn't just a numbers game; it's a powerful tool for anticipating consumer behavior, optimizing logistics, and informing policy. This project explores the intersection of historical data and economic indicators to build a predictive model for U.S. gas prices, combining statistical rigor with real world relevance.*
+
+```{r, include = FALSE}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(vars)
+
+gas_data <- read_csv("GASREGW.csv") %>%
+  rename(date = observation_date, price = GASREGW) %>%
+  mutate(
+    date = as.Date(date),
+    year = year(date),
+    month = month(date),
+    high_price =if_else(price > 3, 1, 0)
+  )
+```
+
+### **Under the Hood: Exploring What Drives Gas Prices**
+#### **Gas Prices Over Time**
+```{r, echo = FALSE}
+ggplot(gas_data, aes(x = date, y = price)) +
+  geom_line(color = "red") +
+  labs(title = "Weekly U.S. Regular Gasoline Prices", x = "Prices ($)", y = "Frequency")
+```
+
+*At a glance, you can see that gas prices have experienced significant ups and downs over the past few decades. From the early 1990s to the early 2000s, prices were relatively stable and low, mostly hovering around $1–$2 per gallon. However, starting around 2005, there’s a noticeable surge—prices began climbing sharply, peaking just before the 2008 financial crisis. After that, they dipped briefly but rose again through the early 2010s, reaching another peak close to $4 per gallon. Following 2014, there’s a sharp decline, and prices fluctuated more moderately for a few years. Then, in the post-2020 period, there’s another dramatic spike—likely tied to global supply chain issues and energy market disruptions following the COVID-19 pandemic and geopolitical tensions.*
+
+#### **Prices by Year**
+```{r, echo = FALSE, warning = FALSE}
+ggplot(gas_data, aes(x = factor(year), y = price)) +
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "Annual AGs Price Distribution", x = "Year", y = "Price ($)") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+*- Early 1990s to early 2000s: Prices were relatively low and stable, with very little variation within each year. Most boxplots are tight, close to the $1–$1.50 range.*
+
+*- 2005–2008: This period marks a sharp increase in gas prices and volatility. The boxes are taller and whiskers longer, showing wide price swings within a year. The 2008 box, in particular, reflects the peak just before the financial crisis.*
+
+*- 2011–2014: Prices remained high, typically around $3.5–$4 per gallon, but with less year-to-year volatility compared to 2008.*
+
+*- 2015–2020: A clear decline in prices, along with more stability. However, 2020 starts to show fluctuation again—likely linked to the COVID-19 pandemic's market disruptions.*
+
+*- 2022 spike: One of the tallest and highest-positioned boxes, indicating both high average prices and extreme volatility, likely tied to post-pandemic recovery and geopolitical events (e.g., war in Ukraine).*
+
+*- 2023–2025: Prices appear to be cooling off and stabilizing, although they remain higher than pre-2020 averages.*
+
+
+### **Testing the Trends: Hypothesis Testing and ANOVA on Gas Price Variations**
+```{r, include = FALSE}
+gas_2020 <- filter(gas_data, year == 2020)$price
+gas_2022 <- filter(gas_data, year == 2022)$price
+t_test_result <- t.test(gas_2020, gas_2022)
+print(t_test_result)
+
+anova_data <- filter(gas_data, year %in% 2019:2023)
+anova_result <- aov(price ~ factor(year), data = anova_data)
+summary(anova_data)
+```
+
+##### **The t-test compares the average gas prices between 2020 and 2022. The results show:**
+
+*- 2020 mean: $2.17*
+
+*- 2022 mean: $3.95*
+
+*- p-value: <2.2e-16 (extremely small)*
+
+**There’s a highly significant difference in average gas prices between these two years. Prices in 2022 were substantially higher than in 2020, and the result is statistically robust. The confidence interval for the mean difference (about $1.63–$1.93) supports that the increase wasn’t due to random variation.**
+
+##### **An ANOVA test to compare gas prices across five years: 2019 to 2023.**
+
+**- The price range goes from about $1.77 (min) to $5.01 (max)**
+
+**- 2022 stands out with higher quartiles and extreme highs**
+
+**- There’s visible variation in means between years:**
+
+  *+ 2020 average ~ $2.5*
+
+  *+ 2021 average ~ $3.1*
+
+  *+ 2022 average ~ $3.95*
+
+  *+ 2023 average ~ $3.6*
+  
+
+### **Binary Boom: Visualizing the Likelihood of Gas Price Surges**
+```{r, include = FALSE}
+logit_model <- glm(high_price ~ factor(month) + factor(year), data = gas_data , family = "binomial")
+summary(logit_model)
+
+predict(logit_model, newdata = data.frame(month = 7, year = 2022), type = "response")
+```
+
+*- From May to September, these months have postive and significant coefficients, indicating higher chances of gas prices exceeding $3. Especially, the model suggests a summer spike in gas prices*
+
+*- Most older years (1991–2019) have coefficients near zero with p > 0.99 — meaning they're statistically insignificant.*
+
+*- Recent years (2021–2025) have very large positive coefficients — e.g., factor(year)2022 = 45.8. These indicate a very high likelihood of high gas prices in recent years.*
+
+*- The prediction gives 1, means there is a ~100% predicted probability that gas price exceeded $3 in July 2022.*
+
+
+#### **Visualizing the Odds: Predicted Probabilities from VAR Forecasts**
+```{r, echo = FALSE, warning = FALSE}
+new_data <- expand.grid(month = 1:12, year = 2020:2025)
+new_data$prob <- predict(logit_model, newdata = new_data, type = "response")
+
+ggplot(new_data, aes(x = month, y = prob, color = factor(year))) +
+  geom_line(size = 1) +
+  labs(title = "Predicted Probability of High Gas Prices",
+       x = "Month", y = "Probability (> $3)",
+       color = "Year") +
+  theme_minimal()
+```
+
+### **Drive or Detour? Evaluating the Roadmap of Model Accuracy**
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+crude_data <- read_csv("DCOILWTICO.csv") %>%
+  rename(date = observation_date, crude_oil_price = DCOILWTICO) %>%
+  mutate(date = as.Date(date)) %>%
+  drop_na(crude_oil_price)
+
+cpi_data <- read_csv("CPIAUCSL.csv") %>%
+  rename(date = observation_date, cpi = CPIAUCSL) %>%
+  mutate(date = as.Date(date))
+
+gas_monthly <- gas_data %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(month) %>%
+  summarise(price = mean(price, na.rm = TRUE)) %>%
+  ungroup()
+
+crude_monthly <- crude_data %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(month) %>%
+  summarise(crude_oil_price = mean(crude_oil_price, na.rm = TRUE)) %>%
+  ungroup()
+
+cpi_monthly <- cpi_data %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(month) %>%
+  summarise(cpi = mean(cpi, na.rm = TRUE)) %>%
+  ungroup()
+
+full_data <- gas_monthly %>%
+  left_join(crude_monthly, by = "month") %>%
+  left_join(cpi_monthly, by = "month") %>%
+  arrange(month)
+
+full_data <- full_data %>%
+  mutate(
+    lag1 = lag(price, 1),
+    lag2 = lag(price, 2),
+    lag_crude = lag(crude_oil_price, 1),
+    lag_cpi = lag(cpi, 1)
+  ) %>%
+  drop_na()
+
+n <- nrow(full_data)
+split_index <- floor(n * 0.85)
+train <- full_data[1:split_index, ]
+test <- full_data[(split_index + 1):n, ]
+
+model <- lm(price ~ lag1 + lag2 + lag_crude + lag_cpi, data = train)
+
+preds <- predict(model, newdata = test)
+actual <- test$price
+
+mape <- mean(abs((actual - preds) / actual)) * 100
+cat("MAPE:", round(mape, 2), "%\n")
+
+plot_df <- tibble(Month = test$month, Actual = actual, Predicted = preds) %>%
+  pivot_longer(cols = c("Actual", "Predicted"), names_to = "Type", values_to = "Price")
+
+ggplot(plot_df, aes(x = Month, y = Price, color = Type)) +
+  geom_line(size = 1.2) +
+  labs(title = "Predicted vs. Actual Gas Prices (Monthly)",
+       x = "Month", y = "Price ($/gallon)", color = "Legend") +
+  theme_minimal()
+
+```
+
+*- The graph illustrates a comparison between predicted and actual U.S. monthly gas prices, supported by a strong model performance with a MAPE of 3.54%. From July to September, the model closely aligns with real-world prices, accurately capturing the initial downward trend. However, from October to January, the model consistently overpredicts, anticipating price stabilization earlier than observed. While the model correctly identifies the upward shift beginning in February, it slightly overestimates the strength of the recovery. Overall, the model demonstrates high accuracy in tracking long-term trends but shows room for improvement in adapting to short-term market fluctuations and shocks.*
+
+<center>
+THE END
+</center>
+
+###### *Thank you for taking the time to explore this project. I hope it offered valuable insights into the power of data-driven forecasting and the challenges of modeling real-world volatility. I look forward to any feedback, questions, or opportunities to further develop and apply these insights.*
